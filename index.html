@@ -55,6 +55,11 @@ button.ghost{background:transparent;border:1px solid var(--line);color:var(--ink
 .list li:first-child{border-top:0}
 .list .meta{color:var(--muted);font-size:13px}
 .hidden{display:none}
+select{width:100%;font:inherit;font-size:16px;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.seg{display:flex;gap:6px;background:var(--bg);border:1px solid var(--line);border-radius:14px;padding:4px}
+.segb{flex:1;border:0;background:transparent;color:var(--muted);font:inherit;font-weight:600;font-size:15px;padding:10px;border-radius:10px;cursor:pointer}
+.segb.on{background:var(--card);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.hint{color:var(--muted);font-size:14px;margin:12px 0 0}
 .pill{display:inline-block;font-size:12px;padding:2px 8px;border-radius:999px;background:var(--ice);color:var(--ink)}
 footer{color:var(--muted);font-size:13px;text-align:center;margin-top:28px}
 </style>
@@ -63,7 +68,7 @@ footer{color:var(--muted);font-size:13px;text-align:center;margin-top:28px}
 <main>
   <p class="pill">Sprachbot-Demo · privat</p>
   <h1>Streich-<span>Cockpit</span></h1>
-  <p class="sub">Kurz briefen, auf „Anrufen“ tippen: Der Bot ruft mit Pauls Stimme an, führt dein Gegenüber aufs Glatteis und sagt am Ende selbst, dass er eine KI ist.</p>
+  <p class="sub">Kurz briefen, auf „Anrufen“ tippen: Der Bot ruft als Paul oder als erfundene Figur an, führt dein Gegenüber aufs Glatteis und sagt am Ende selbst, dass er eine KI ist.</p>
 
   <!-- Anmeldung -->
   <section class="card" id="login">
@@ -78,6 +83,31 @@ footer{color:var(--muted);font-size:13px;text-align:center;margin-top:28px}
   <div id="app" class="hidden">
     <!-- Briefing -->
     <section class="card">
+      <h2>Wer ruft an?</h2>
+      <div class="seg" id="seg">
+        <button type="button" class="segb on" data-m="paul">Ich selbst (Paul)</button>
+        <button type="button" class="segb" data-m="figur">Eine erfundene Figur</button>
+      </div>
+      <div id="figur" class="hidden">
+        <label for="anrufer">Name der Figur</label>
+        <input id="anrufer" placeholder="z. B. Herr Brandl">
+        <label for="rolle">Wer ist das? <small>Erfunden, keine echte Firma oder Behörde</small></label>
+        <input id="rolle" placeholder="z. B. Organisator vom Grillverein „Glut &amp; Gloria“">
+        <label for="stimme">Stimme</label>
+        <select id="stimme">
+          <option value="izKWYwiRyBX2nsywCqjy">Mann, jung</option>
+          <option value="33gBsdZWso69tT0rFa9t">Mann, älter</option>
+          <option value="Cx9eG8CNCDtCPeLiemtm">Mann, leicht sächsisch</option>
+          <option value="fMyxhh0AKDSSvBYRDhz7">Frau, jung</option>
+          <option value="ssAtxnrElSw3BUSLNszL">Frau, mittleres Alter</option>
+          <option value="IOLHqlYzlGMpMstxHyRf">Frau, älter</option>
+          <option value="4yZGYlR0JpmqiCxBgPi5">Frau, Schweizer Einschlag</option>
+        </select>
+      </div>
+      <p class="hint" id="paulHint">Der Bot spricht mit deiner geklonten Stimme und stellt sich als Paul vor.</p>
+    </section>
+
+    <section class="card">
       <h2>Briefing</h2>
       <label for="name">Wen soll der Bot anrufen? <small>Vorname, so wie du ihn ansprichst</small></label>
       <input id="name" placeholder="z. B. Mark">
@@ -85,7 +115,7 @@ footer{color:var(--muted);font-size:13px;text-align:center;margin-top:28px}
       <input id="nummer" type="tel" inputmode="tel" placeholder="0171 1234567">
       <label for="beziehung">Woher kennt ihr euch?</label>
       <input id="beziehung" placeholder="z. B. Freunde seit dem Studium">
-      <label for="insider">Was weiß „Paul“ über die Person? <small>2–3 echte Details</small></label>
+      <label for="insider">Was weiß der Anrufer über die Person? <small>2–3 echte Details</small></label>
       <textarea id="insider" placeholder="z. B. wohnt in Haidhausen, Hund heißt Bruno, grillt leidenschaftlich gern"></textarea>
       <label for="anliegen">Dein Anliegen, also der Streich</label>
       <textarea id="anliegen" placeholder="Womit fängt der Bot harmlos an, und wohin soll es eskalieren?"></textarea>
@@ -145,6 +175,14 @@ Object.keys(BEISPIELE).forEach(k => {
   chips.appendChild(b);
 });
 
+let MODUS = "paul";
+document.querySelectorAll(".segb").forEach(b => b.onclick = () => {
+  MODUS = b.dataset.m;
+  document.querySelectorAll(".segb").forEach(x => x.classList.toggle("on", x === b));
+  $("figur").classList.toggle("hidden", MODUS !== "figur");
+  $("paulHint").classList.toggle("hidden", MODUS === "figur");
+});
+
 function show(el, text, kind){ el.textContent = text; el.className = "msg show " + kind; }
 function hide(el){ el.className = "msg"; }
 
@@ -195,14 +233,28 @@ $("callBtn").onclick = async () => {
     insider: $("insider").value.trim() || "Keine weiteren Details bekannt.",
     anliegen: $("anliegen").value.trim()
   };
+  if (MODUS === "figur"){
+    f.anrufer = $("anrufer").value.trim();
+    f.anrufer_rolle = $("rolle").value.trim() || "eine erfundene Figur";
+    f.stimme = $("stimme").value;
+    f.begruessung = `Hallo, spreche ich mit ${f.name}? Hier ist ${f.anrufer}.`;
+  } else {
+    f.anrufer = "Paul";
+    f.anrufer_rolle = "Paul Höser aus München";
+    f.stimme = "PtJGS72tw2Zfiy0FwA5V";
+    f.begruessung = `Hey ${f.name}, ich bin's, Paul! Na, hast du kurz zwei Minuten?`;
+  }
   const m = $("callMsg");
+  if (MODUS === "figur" && !f.anrufer){ show(m, "Bitte einen Namen für die Figur eintragen.", "err"); return; }
   if (!f.name || f.nummer.length < 8 || !f.anliegen){ show(m, "Bitte mindestens Name, Telefonnummer und Anliegen ausfüllen.", "err"); return; }
   if (!confirm(`Der Bot ruft jetzt ${f.name} unter ${f.nummer} an. Los?`)) return;
   $("callBtn").disabled = true; show(m, "Wähle …", "info");
   try{
     const j = await call("anrufen", f);
     const d = j.data || {};
-    if (j.ok && (d.conversation_id || d.success)){
+    if (j.ok && d.success === false && /compliance|KYC/i.test(d.message || "")){
+      show(m, "Twilio sperrt Anrufe noch: Die Identitätsprüfung (Trust Hub) ist nicht abgeschlossen.", "err");
+    } else if (j.ok && d.conversation_id){
       show(m, `Es klingelt bei ${f.name}. Das Protokoll erscheint unten.`, "ok");
       const namen = JSON.parse(store.get("cockpit_namen") || "{}");
       if (d.conversation_id){ namen[d.conversation_id] = f.name; store.set("cockpit_namen", JSON.stringify(namen)); starteProtokoll(d.conversation_id); }
@@ -220,7 +272,7 @@ function zeigeProtokoll(d){
   (d.transcript || []).forEach(t => {
     if (!t.message) return;
     const b = document.createElement("div"); b.className = "b " + (t.role === "agent" ? "agent" : "user");
-    const em = document.createElement("em"); em.textContent = t.role === "agent" ? "Bot („Paul“)" : "Gegenüber";
+    const em = document.createElement("em"); em.textContent = t.role === "agent" ? "Bot" : "Gegenüber";
     b.appendChild(em); b.appendChild(document.createTextNode(t.message)); chat.appendChild(b);
   });
   if (!chat.children.length) chat.innerHTML = '<p class="meta" style="color:var(--muted)">Noch nichts gesagt …</p>';
