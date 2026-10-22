@@ -272,7 +272,7 @@ $("callBtn").onclick = async () => {
   } else {
     f.anrufer = "Paul";
     f.anrufer_rolle = "Paul Höser aus München";
-    f.stimme = "5D9MFNM4W9lcRcQnOViu";
+    f.stimme = "FuFgFQZswMUqE0EVLRSq";
     f.begruessung = `Hey ${f.name}, ich bin's, Paul! Na, hast du kurz zwei Minuten?`;
   }
   const m = $("callMsg");
@@ -303,7 +303,7 @@ $("callBtn").onclick = async () => {
 
 // Briefing aus dem Protokoll lesen und als Vorlage übernehmen
 let LETZTES_BRIEFING = null;
-const STIMMEN = { "5D9MFNM4W9lcRcQnOViu":"Paul (Klon)", "PtJGS72tw2Zfiy0FwA5V":"Paul (Calm Expert)" };
+const STIMMEN = { "FuFgFQZswMUqE0EVLRSq":"Paul (Telefon-Klon)", "5D9MFNM4W9lcRcQnOViu":"Paul (V4-Pro-Klon)", "PtJGS72tw2Zfiy0FwA5V":"Paul (Calm Expert)" };
 document.querySelectorAll("#stimme option").forEach(o => STIMMEN[o.value] = o.textContent);
 function leseBriefing(d){
   const ci = d.conversation_initiation_client_data || {};
