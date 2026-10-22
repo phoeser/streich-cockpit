@@ -60,6 +60,13 @@ select{width:100%;font:inherit;font-size:16px;color:var(--ink);background:var(--
 .segb{flex:1;border:0;background:transparent;color:var(--muted);font:inherit;font-weight:600;font-size:15px;padding:10px;border-radius:10px;cursor:pointer}
 .segb.on{background:var(--card);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.12)}
 .hint{color:var(--muted);font-size:14px;margin:12px 0 0}
+.brief{margin-top:14px;padding:14px;border:1px dashed var(--line);border-radius:14px;background:var(--bg)}
+.brief-h{font-weight:600;font-size:14px;margin-bottom:8px}
+.brief dl{margin:0 0 12px;display:grid;grid-template-columns:110px 1fr;gap:4px 10px;font-size:14px}
+.brief dt{color:var(--muted)}
+.brief dd{margin:0;white-space:pre-wrap;word-break:break-word}
+.flash{animation:flash 1.2s ease-out}
+@keyframes flash{0%{box-shadow:0 0 0 3px var(--accent)}100%{box-shadow:0 0 0 0 transparent}}
 .pill{display:inline-block;font-size:12px;padding:2px 8px;border-radius:999px;background:var(--ice);color:var(--ink)}
 footer{color:var(--muted);font-size:13px;text-align:center;margin-top:28px}
 </style>
@@ -127,6 +134,11 @@ footer{color:var(--muted);font-size:13px;text-align:center;margin-top:28px}
     <!-- Laufendes Gespräch -->
     <section class="card hidden" id="liveCard">
       <div class="row" style="justify-content:space-between"><h2 style="margin:0">Gesprächsprotokoll</h2><span class="pill" id="liveStatus">läuft …</span></div>
+      <div class="brief hidden" id="briefBox">
+        <div class="brief-h">Briefing dieses Anrufs</div>
+        <dl id="briefList"></dl>
+        <button class="ghost" id="reuseBtn" type="button">↺ Als Vorlage für neuen Streich übernehmen</button>
+      </div>
       <div class="chat" id="chat"></div>
     </section>
 
@@ -266,8 +278,62 @@ $("callBtn").onclick = async () => {
   $("callBtn").disabled = false;
 };
 
+// Briefing aus dem Protokoll lesen und als Vorlage übernehmen
+let LETZTES_BRIEFING = null;
+const STIMMEN = { "5D9MFNM4W9lcRcQnOViu":"Paul (Klon)", "PtJGS72tw2Zfiy0FwA5V":"Paul (Calm Expert)" };
+document.querySelectorAll("#stimme option").forEach(o => STIMMEN[o.value] = o.textContent);
+function leseBriefing(d){
+  const ci = d.conversation_initiation_client_data || {};
+  const v = ci.dynamic_variables || {};
+  const tts = (ci.conversation_config_override || {}).tts || {};
+  const pc = (d.metadata || {}).phone_call || {};
+  if (!v.anliegen && !v.name) return null;
+  return {
+    name: v.name || "", nummer: pc.external_number || "",
+    beziehung: v.beziehung || "", insider: v.insider || "", anliegen: v.anliegen || "",
+    anrufer: v.anrufer || "Paul", anrufer_rolle: v.anrufer_rolle || "", stimme: tts.voice_id || ""
+  };
+}
+function zeigeBriefing(b){
+  LETZTES_BRIEFING = b;
+  const box = $("briefBox"), dl = $("briefList");
+  if (!b){ box.classList.add("hidden"); return; }
+  dl.innerHTML = "";
+  const istPaul = b.anrufer === "Paul";
+  [["Angerufen", b.name + (b.nummer ? " · " + b.nummer : "")],
+   ["Anrufer", istPaul ? "Paul selbst" : b.anrufer + (b.anrufer_rolle ? " – " + b.anrufer_rolle : "")],
+   ["Stimme", STIMMEN[b.stimme] || "–"],
+   ["Beziehung", b.beziehung], ["Insider", b.insider], ["Streich", b.anliegen]
+  ].forEach(([k, val]) => {
+    if (!val) return;
+    const dt = document.createElement("dt"); dt.textContent = k;
+    const dd = document.createElement("dd"); dd.textContent = val;
+    dl.appendChild(dt); dl.appendChild(dd);
+  });
+  box.classList.remove("hidden");
+}
+$("reuseBtn").onclick = () => {
+  const b = LETZTES_BRIEFING; if (!b) return;
+  const modus = b.anrufer === "Paul" ? "paul" : "figur";
+  document.querySelector(`.segb[data-m="${modus}"]`).click();
+  if (modus === "figur"){
+    $("anrufer").value = b.anrufer; $("rolle").value = b.anrufer_rolle;
+    if ([...$("stimme").options].some(o => o.value === b.stimme)) $("stimme").value = b.stimme;
+  }
+  $("name").value = b.name;
+  $("nummer").value = b.nummer;
+  $("beziehung").value = b.beziehung;
+  $("insider").value = b.insider;
+  $("anliegen").value = b.anliegen;
+  const karte = $("name").closest(".card");
+  karte.scrollIntoView({ behavior:"smooth", block:"start" });
+  karte.classList.remove("flash"); void karte.offsetWidth; karte.classList.add("flash");
+  show($("callMsg"), "Vorlage übernommen – jetzt anpassen und neu anrufen lassen.", "info");
+};
+
 // Protokoll
 function zeigeProtokoll(d){
+  zeigeBriefing(leseBriefing(d));
   const chat = $("chat"); chat.innerHTML = "";
   (d.transcript || []).forEach(t => {
     if (!t.message) return;
