@@ -68,6 +68,11 @@ select{width:100%;font:inherit;font-size:16px;color:var(--ink);background:var(--
 .flash{animation:flash 1.2s ease-out}
 @keyframes flash{0%{box-shadow:0 0 0 3px var(--accent)}100%{box-shadow:0 0 0 0 transparent}}
 .pill{display:inline-block;font-size:12px;padding:2px 8px;border-radius:999px;background:var(--ice);color:var(--ink)}
+.star{background:transparent;border:0;font-size:22px;line-height:1;cursor:pointer;color:var(--muted);padding:4px 6px}
+.star.on{color:#e0a400}
+.acts{display:flex;gap:4px;align-items:center;flex-shrink:0}
+.list li > div:first-child{min-width:0}
+.list .t{overflow:hidden;text-overflow:ellipsis}
 footer{color:var(--muted);font-size:13px;text-align:center;margin-top:28px}
 </style>
 </head>
@@ -137,9 +142,23 @@ footer{color:var(--muted);font-size:13px;text-align:center;margin-top:28px}
       <div class="brief hidden" id="briefBox">
         <div class="brief-h">Briefing dieses Anrufs</div>
         <dl id="briefList"></dl>
-        <button class="ghost" id="reuseBtn" type="button">↺ Als Vorlage für neuen Streich übernehmen</button>
+        <div class="row">
+          <button class="ghost" id="reuseBtn" type="button">↺ Als Vorlage übernehmen</button>
+          <button class="ghost" id="favBtn" type="button">☆ Als Favorit merken</button>
+        </div>
       </div>
       <div class="chat" id="chat"></div>
+    </section>
+
+    <!-- Gespeicherte Briefings -->
+    <section class="card">
+      <div class="row" style="justify-content:space-between"><h2 style="margin:0">Gespeicherte Briefings</h2><button class="ghost" id="reloadBriefs">Aktualisieren</button></div>
+      <div class="seg" id="briefTabs" style="margin-top:14px">
+        <button class="segb on" data-t="alle" type="button">Alle</button>
+        <button class="segb" data-t="fav" type="button">★ Favoriten</button>
+      </div>
+      <ul class="list" id="briefsList" style="margin-top:8px"><li class="meta">Noch nichts geladen.</li></ul>
+      <p class="hint">Jedes Briefing wird automatisch 180 Tage aufbewahrt. Favoriten bleiben, bis du den Stern wieder entfernst.</p>
     </section>
 
     <!-- Verlauf -->
@@ -156,7 +175,7 @@ footer{color:var(--muted);font-size:13px;text-align:center;margin-top:28px}
         <li>Auf eine ernst gemeinte „Bist du ein Bot?“-Frage antwortet er sofort ehrlich. Das gilt auch, wenn jemand gestresst wirkt, Auto fährt oder keine Zeit hat.</li>
         <li>Er fragt nie nach Geld oder Daten, täuscht keine Notfälle vor und gibt sich nicht als Behörde oder Firma aus.</li>
         <li>Bei der Mailbox legt er wortlos auf. Nimmt jemand anderes ab, macht er keinen Streich.</li>
-        <li>Es wird kein Ton aufgezeichnet, nur das Textprotokoll, und das wird nach 30 Tagen gelöscht.</li>
+        <li>Es wird kein Ton aufgezeichnet, nur das Textprotokoll, und das wird nach 30 Tagen gelöscht. Die Briefings (deine Eingaben) bleiben 180 Tage, Favoriten dauerhaft.</li>
       </ul>
     </section>
     <div class="row" style="justify-content:center"><button class="ghost" id="logoutBtn">Abmelden</button></div>
@@ -188,9 +207,9 @@ Object.keys(BEISPIELE).forEach(k => {
 });
 
 let MODUS = "paul";
-document.querySelectorAll(".segb").forEach(b => b.onclick = () => {
+document.querySelectorAll("#seg .segb").forEach(b => b.onclick = () => {
   MODUS = b.dataset.m;
-  document.querySelectorAll(".segb").forEach(x => x.classList.toggle("on", x === b));
+  document.querySelectorAll("#seg .segb").forEach(x => x.classList.toggle("on", x === b));
   $("figur").classList.toggle("hidden", MODUS !== "figur");
   $("paulHint").classList.toggle("hidden", MODUS === "figur");
 });
@@ -224,7 +243,7 @@ async function login(pw, still){
     if (j.ok){
       if ($("merken").checked) store.set("cockpit_pw", pw);
       $("login").classList.add("hidden"); $("app").classList.remove("hidden");
-      ladeVerlauf();
+      ladeVerlauf(); ladeBriefings();
     } else {
       store.del("cockpit_pw"); PW = null;
       if (!still) show($("loginMsg"), "Das Passwort stimmt nicht.", "err");
@@ -269,7 +288,11 @@ $("callBtn").onclick = async () => {
     } else if (j.ok && d.conversation_id){
       show(m, `Es klingelt bei ${f.name}. Das Protokoll erscheint unten.`, "ok");
       const namen = JSON.parse(store.get("cockpit_namen") || "{}");
-      if (d.conversation_id){ namen[d.conversation_id] = f.name; store.set("cockpit_namen", JSON.stringify(namen)); starteProtokoll(d.conversation_id); }
+      if (d.conversation_id){
+        namen[d.conversation_id] = f.name; store.set("cockpit_namen", JSON.stringify(namen));
+        speichereBriefing(d.conversation_id, f, false).then(ladeBriefings).catch(() => {});
+        starteProtokoll(d.conversation_id);
+      }
     } else {
       const txt = (d.detail && (d.detail.message || d.detail)) || d.message || j.fehler || j.hinweis || "Unbekannter Fehler";
       show(m, "Der Anruf ging nicht raus: " + (typeof txt === "string" ? txt : JSON.stringify(txt)), "err");
@@ -312,8 +335,9 @@ function zeigeBriefing(b){
   });
   box.classList.remove("hidden");
 }
-$("reuseBtn").onclick = () => {
-  const b = LETZTES_BRIEFING; if (!b) return;
+$("reuseBtn").onclick = () => fuelleFormular(LETZTES_BRIEFING);
+function fuelleFormular(b){
+  if (!b) return;
   const modus = b.anrufer === "Paul" ? "paul" : "figur";
   document.querySelector(`.segb[data-m="${modus}"]`).click();
   if (modus === "figur"){
@@ -329,6 +353,99 @@ $("reuseBtn").onclick = () => {
   karte.scrollIntoView({ behavior:"smooth", block:"start" });
   karte.classList.remove("flash"); void karte.offsetWidth; karte.classList.add("flash");
   show($("callMsg"), "Vorlage übernommen – jetzt anpassen und neu anrufen lassen.", "info");
+}
+
+// Gespeicherte Briefings & Favoriten (Google-Tabelle über Make)
+let BRIEFINGS = [], TAB = "alle", LETZTE_CONV = null;
+function briefingAusDaten(txt){
+  let o; try { o = JSON.parse(txt || "{}"); } catch(e){ return null; }
+  if (o.conversation_initiation_client_data){ // altes Format: Anruf-Auftrag
+    const ci = o.conversation_initiation_client_data, v = ci.dynamic_variables || {};
+    const tts = (ci.conversation_config_override || {}).tts || {};
+    o = Object.assign({}, v, { nummer: o.to_number || "", stimme: tts.voice_id || "" });
+  }
+  return {
+    name: o.name || "", nummer: o.nummer || "", beziehung: o.beziehung || "", insider: o.insider || "",
+    anliegen: o.anliegen || "", anrufer: o.anrufer || "Paul", anrufer_rolle: o.anrufer_rolle || "", stimme: o.stimme || ""
+  };
+}
+function kurzTitel(b){ return (b.name || "Unbekannt") + " – " + (b.anliegen || "").slice(0, 50); }
+async function speichereBriefing(conv, b, fav, titel){
+  const daten = JSON.stringify({
+    name: b.name, nummer: b.nummer, beziehung: b.beziehung, insider: b.insider, anliegen: b.anliegen,
+    anrufer: b.anrufer, anrufer_rolle: b.anrufer_rolle, stimme: b.stimme
+  });
+  return call("speichern", { conv, titel: (titel || kurzTitel(b)).slice(0, 80), favorit: fav ? "TRUE" : "FALSE", daten });
+}
+async function ladeBriefings(){
+  const ul = $("briefsList");
+  if (!BRIEFINGS.length) ul.innerHTML = '<li class="meta">Lade …</li>';
+  try{
+    const j = await call("briefings");
+    const rows = (j.data && j.data.values) || [];
+    BRIEFINGS = [];
+    rows.forEach((r, i) => {
+      if (!r || !r[0]) return;
+      BRIEFINGS.push({ zeile: i + 2, id: r[0], erstellt: r[1] || "", titel: r[2] || "", fav: String(r[3]).toUpperCase() === "TRUE", conv: r[4] || "", b: briefingAusDaten(r[5]) });
+    });
+    BRIEFINGS.reverse();
+    zeigeBriefings(); favKnopf();
+  } catch(e){ ul.innerHTML = '<li class="meta">Konnte die Briefings nicht laden.</li>'; }
+}
+function zeigeBriefings(){
+  const ul = $("briefsList"); ul.innerHTML = "";
+  const liste = BRIEFINGS.filter(x => TAB === "alle" || x.fav);
+  if (!liste.length){ ul.innerHTML = `<li class="meta">${TAB === "fav" ? "Noch keine Favoriten. Tippe auf den Stern bei einem Briefing." : "Noch keine Briefings gespeichert."}</li>`; return; }
+  liste.forEach(x => {
+    const li = document.createElement("li");
+    li.innerHTML = '<div><div class="t"></div><div class="meta"></div></div><div class="acts"></div>';
+    li.querySelector(".t").textContent = (x.fav ? "★ " : "") + (x.titel || kurzTitel(x.b || {}));
+    const tage = x.erstellt ? Math.max(0, 180 - Math.floor((Date.now() - new Date(x.erstellt.replace(" ", "T"))) / 864e5)) : null;
+    li.querySelector(".meta").textContent = x.erstellt + (x.fav ? " · dauerhaft" : (tage !== null && !isNaN(tage) ? ` · noch ${tage} Tage` : ""));
+    const acts = li.querySelector(".acts");
+    const s = document.createElement("button"); s.className = "star" + (x.fav ? " on" : ""); s.type = "button";
+    s.textContent = x.fav ? "★" : "☆"; s.title = x.fav ? "Favorit entfernen" : "Als Favorit merken";
+    s.onclick = () => toggleFav(x, s);
+    const v = document.createElement("button"); v.className = "ghost"; v.type = "button"; v.textContent = "Vorlage";
+    v.onclick = () => fuelleFormular(x.b);
+    if (!x.b) v.disabled = true;
+    acts.appendChild(s); acts.appendChild(v);
+    li.appendChild(acts); ul.appendChild(li);
+  });
+}
+async function toggleFav(x, knopf){
+  let titel = x.titel;
+  if (!x.fav){
+    const t = prompt("Name für diesen Favoriten:", x.titel || kurzTitel(x.b || {}));
+    if (t === null) return;
+    titel = t.trim() || x.titel;
+  }
+  if (knopf) knopf.disabled = true;
+  const j = await call("favorit", { zeile: String(x.zeile), titel: titel.slice(0, 80), favorit: x.fav ? "FALSE" : "TRUE" }).catch(() => ({ ok:false }));
+  if (!j.ok) alert("Konnte den Favoriten nicht speichern.");
+  await ladeBriefings();
+}
+document.querySelectorAll("#briefTabs .segb").forEach(b => b.onclick = () => {
+  TAB = b.dataset.t;
+  document.querySelectorAll("#briefTabs .segb").forEach(x => x.classList.toggle("on", x === b));
+  zeigeBriefings();
+});
+$("reloadBriefs").onclick = ladeBriefings;
+function favKnopf(){
+  const e = LETZTE_CONV && BRIEFINGS.find(x => x.conv === LETZTE_CONV);
+  $("favBtn").textContent = e && e.fav ? "★ Favorit gemerkt" : "☆ Als Favorit merken";
+  $("favBtn").disabled = !!(e && e.fav);
+}
+$("favBtn").onclick = async () => {
+  const b = LETZTES_BRIEFING; if (!b) return;
+  const e = LETZTE_CONV && BRIEFINGS.find(x => x.conv === LETZTE_CONV);
+  if (e) return toggleFav(e, $("favBtn"));
+  const t = prompt("Name für diesen Favoriten:", kurzTitel(b));
+  if (t === null) return;
+  $("favBtn").disabled = true;
+  const j = await speichereBriefing(LETZTE_CONV || ("fav_" + Date.now()), b, true, t.trim()).catch(() => ({ ok:false }));
+  if (!j.ok){ alert("Konnte den Favoriten nicht speichern."); $("favBtn").disabled = false; }
+  await ladeBriefings();
 };
 
 // Protokoll
@@ -352,6 +469,7 @@ async function holeProtokoll(id){
 }
 function starteProtokoll(id){
   clearInterval(pollTimer);
+  LETZTE_CONV = id; favKnopf();
   $("liveCard").classList.remove("hidden");
   $("chat").innerHTML = '<p style="color:var(--muted)">Warte auf das Gespräch …</p>';
   $("liveCard").scrollIntoView({ behavior:"smooth" });
